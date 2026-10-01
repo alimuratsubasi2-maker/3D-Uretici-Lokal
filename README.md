@@ -27,8 +27,10 @@ Modeller ilk kullanımda Hugging Face'ten otomatik indirilir.
 
 ## Gereksinimler
 
-- Windows, Python 3.11
-- NVIDIA ekran kartı (6 GB VRAM ile test edildi: RTX 4050 Laptop)
+- Windows, Python 3.11 ("Add Python to PATH" işaretli kurulmalı) ve Git
+- **NVIDIA ekran kartı, en az 6 GB VRAM** (RTX 4050 Laptop 6 GB ile test edildi). AMD/Intel kartlarda ve ekran kartı olmayan bilgisayarlarda çalışmaz.
+- En az 16 GB RAM, ~20 GB boş disk (modeller ~13 GB + PyTorch ~3 GB)
+- İlk açılışta internet: modeller bir kereliğine indirilir, sonra tamamen çevrimdışı çalışır
 - İsteğe bağlı: Blender, Matrix (Rhino), ZBrush
 
 ## Kurulum
@@ -37,11 +39,15 @@ Modeller ilk kullanımda Hugging Face'ten otomatik indirilir.
 git clone https://github.com/alimuratsubasi2-maker/3D-Uretici-Lokal.git
 cd 3D-Uretici-Lokal
 
-# PyTorch (CUDA 12.8)
+# 1) ÖNCE PyTorch (CUDA 12.8). Sıra önemli: önce requirements kurulursa
+#    pip ekran kartı desteği olmayan CPU sürümünü kurar ve uygulama çalışmaz.
 pip install torch==2.8.0 torchvision==0.23.0 --index-url https://download.pytorch.org/whl/cu128
 
-# Diğer paketler
+# 2) Diğer paketler
 pip install -r requirements.txt
+
+# Kontrol: True yazmalı
+python -c "import torch; print(torch.cuda.is_available())"
 
 # Hunyuan3D-2 kodu bu klasörün içine klonlanır
 git clone https://github.com/Tencent/Hunyuan3D-2.git
