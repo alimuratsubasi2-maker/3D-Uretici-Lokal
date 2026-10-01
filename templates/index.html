@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Yerel 3D Model Üretici</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <style>
+        body {
+            background: #0d0e0f;
+            color: #e7eaec;
+            font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+        }
+        .kart { background: #141517; border: 1px solid #25272a; border-radius: 10px; }
+        .pill { border: 1px solid #303336; border-radius: 6px; padding: 3px 8px; font-size: 11px; color: #c8cdd1; background: #141517; }
+        .soluk { color: #7c838a; }
+        .yesil { color: #43d98c; }
+        .kirmizi { color: #f0585e; }
+        .izgara-zemin {
+            background-image:
+                linear-gradient(#1d1f22 1px, transparent 1px),
+                linear-gradient(90deg, #1d1f22 1px, transparent 1px);
+            background-size: 100% 36px, 56px 100%;
+        }
+        .kutu { border: 1px solid #25272a; border-radius: 8px; background: #141517; transition: border-color .15s, background .15s; }
+        .kutu:hover { border-color: #3a3d41; }
+        .kutu.aktif { border-color: #d9dde0; background: #1b1c1f; }
+        .segment button { padding: 3px 10px; font-size: 11px; color: #7c838a; border-radius: 5px; }
+        .segment button.aktif { background: #e7eaec; color: #0d0e0f; font-weight: 600; }
+        /* Anahtar (switch) — gerçek checkbox, sadece görünümü değişik */
+        .anahtar { appearance: none; -webkit-appearance: none; width: 34px; height: 19px; border-radius: 999px; background: #2b2e31; position: relative; cursor: pointer; transition: background .15s; flex-shrink: 0; }
+        .anahtar::before { content: ""; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: #8b9197; transition: all .15s; }
+        .anahtar:checked { background: #e7eaec; }
+        .anahtar:checked::before { left: 17px; background: #0d0e0f; }
+        .alan { background: transparent; width: 100%; font-size: 20px; font-weight: 500; color: #fff; outline: none; }
+        .alan::placeholder { color: #4a4f54; }
+        .secim { background: #141517; border: 1px solid #303336; border-radius: 6px; padding: 4px 8px; font-size: 11px; color: #c8cdd1; outline: none; }
+        #dropzone.drag { outline: 1px dashed #9aa1a7; outline-offset: -6px; }
+        model-viewer { width: 100%; height: 520px; background: #000; border-radius: 8px; }
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+        select option[hidden] { display: none; }
+        .balon-acik { background: #dfe6e7; color: #111; border-radius: 6px; }
+        .balon-koyu { background: #1c1d20; color: #e7eaec; border-radius: 6px; }
+    </style>
+</head>
+<body class="min-h-screen">
+
+<!-- Üst bar -->
+<header class="border-b border-[#1f2123]">
+    <div class="max-w-6xl mx-auto px-4 md:px-6 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-md bg-zinc-200 text-zinc-900 flex items-center justify-center">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+            </div>
+            <div>
+                <p class="text-sm font-semibold">Yerel 3D Motoru</p>
+                <p class="text-[10px] soluk">127.0.0.1:5050 · çevrimdışı</p>
+            </div>
+        </div>
+        <button type="button" id="aramaCubugu" class="kart hidden sm:flex items-center gap-2 px-3 py-2 w-[360px] text-left">
+            <svg class="w-4 h-4 soluk" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0-12l-4 4m4-4l4 4"/></svg>
+            <span class="text-xs soluk flex-1">Görsel / STL / OBJ seç veya sürükle</span>
+            <span class="pill">/</span>
+        </button>
+    </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 md:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+    <!-- ===================== SOL: YÜKLE & MOD ===================== -->
+    <section class="lg:col-span-5 flex flex-col gap-4">
+        <input type="file" id="dosya" accept="image/*,.stl,.obj" class="hidden">
+
+        <!-- Önizleme kartı -->
+        <div class="kart overflow-hidden">
+            <div class="flex items-center gap-2 px-3 py-2 border-b border-[#25272a] text-[11px] min-h-[41px]">
+                <p class="text-sm font-semibold mr-auto">Dosya</p>
+                <div id="varlikKart" class="flex items-center gap-2 min-w-0" style="display:none">
+                    <span id="dosyaAdi" class="font-semibold truncate max-w-[150px]"></span>
+                    <span id="varlikTur" class="pill yesil">Görsel</span>
+                    <span id="varlikNot" class="soluk truncate"></span>
+                </div>
+            </div>
+            <div id="dropzone" class="izgara-zemin h-[260px] flex items-center justify-center cursor-pointer relative">
+                <div id="bosDurum" class="text-center">
+                    <div class="w-10 h-10 mx-auto rounded-md border border-[#303336] flex items-center justify-center soluk mb-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="1.6" d="M12 5v14m7-7H5"/></svg>
+                    </div>
+                    <p class="text-[11px] text-zinc-300">Dosyayı buraya bırak ya da tıkla</p>
+                    <p class="text-[10px] soluk mt-0.5">png · jpg · stl · obj</p>
+                </div>
+                <img id="onizleme" class="max-h-[235px] max-w-[90%] object-contain" style="display:none" alt="">
+                <svg id="modelIkon" class="w-20 h-20 text-zinc-300" style="display:none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                <span class="absolute bottom-1.5 right-2 text-[10px] soluk">önizleme</span>
+            </div>
+        </div>
+
+        <!-- Mod kutuları -->
+        <div class="kart p-3 space-y-3">
+            <div class="flex items-center justify-between">
+                <p class="text-sm font-semibold">Çalışma Modu</p>
+                <select id="mod" class="hidden">
+                    <option value="kabartma" selected>Kabartma</option>
+                    <option value="tam3d">Tam 3D</option>
+                    <option value="model">Hazır Model</option>
+                </select>
+                <span class="pill">3 mod</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <button type="button" data-mod="kabartma" class="kutu modKutu px-3 py-3 text-left">
+                    <span class="flex items-center justify-between text-xs">
+                        <span class="flex items-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.6" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>Kabartma</span>
+                        <span class="text-[10px] yesil">önerilen</span>
+                    </span>
+                    <span class="block text-[10px] soluk mt-1.5">kolye ucu · amblem</span>
+                </button>
+                <button type="button" data-mod="tam3d" class="kutu modKutu px-3 py-3 text-left">
+                    <span class="flex items-center justify-between text-xs">
+                        <span class="flex items-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.6" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>Tam 3D</span>
+                        <span class="text-[10px] soluk">~3 dk</span>
+                    </span>
+                    <span class="block text-[10px] soluk mt-1.5">heykel formu</span>
+                </button>
+                <button type="button" data-mod="model" class="kutu modKutu px-3 py-3 text-left">
+                    <span class="flex items-center justify-between text-xs">
+                        <span class="flex items-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.6" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>Hazır Model</span>
+                    </span>
+                    <span class="block text-[10px] soluk mt-1.5">stl/obj · onar · boşalt</span>
+                </button>
+                <label id="cizimAyar" class="kutu px-3 py-3 cursor-pointer">
+                    <span class="flex items-center justify-between text-xs">
+                        <span class="flex items-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M15.2 5.2l3.6 3.6M4 20l4.5-1 10.3-10.3a2.5 2.5 0 00-3.5-3.5L5 15.5 4 20z"/></svg>Karakalem</span>
+                        <input id="cizim" type="checkbox" class="anahtar">
+                    </span>
+                    <span id="cizimNot" class="block text-[10px] soluk mt-1.5">önce heykele çevir (+1 dk)</span>
+                </label>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================== SAĞ: AYARLAR ===================== -->
+    <section class="lg:col-span-7 flex flex-col gap-4">
+
+        <!-- KABARTMA AYARLARI -->
+        <div id="kabartmaAyar" class="kart p-4 space-y-3">
+            <div class="flex items-center justify-between">
+                <p class="text-sm font-semibold">Kabartma</p>
+                <select id="kalite" class="hidden">
+                    <option value="yuksek" selected>Yüksek</option>
+                    <option value="hizli">Hızlı</option>
+                </select>
+                <div class="segment pill flex gap-1 !p-0.5">
+                    <button type="button" data-kalite="yuksek">Yüksek 3D · 3-6 dk</button>
+                    <button type="button" data-kalite="hizli">Hızlı · ~20 sn</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                    <p class="text-[10px] soluk mb-1">Genişlik mm</p>
+                    <input id="genislik" type="number" value="30" min="5" max="200" step="1" class="alan">
+                </div>
+                <div id="yuksekKalinlik">
+                    <p class="text-[10px] soluk mb-1">Kalınlık mm</p>
+                    <input id="kalinlikK" type="number" min="0.5" max="100" step="0.5" placeholder="oto" class="alan">
+                </div>
+                <div id="hizliAlan" class="contents" style="display:none">
+                    <div>
+                        <p class="text-[10px] soluk mb-1">Derinlik mm</p>
+                        <input id="derinlik" type="number" value="5" min="0.3" max="30" step="0.1" class="alan">
+                    </div>
+                    <div>
+                        <p class="text-[10px] soluk mb-1">Taban mm</p>
+                        <input id="taban" type="number" value="1.5" min="0.3" max="20" step="0.1" class="alan">
+                    </div>
+                </div>
+                <div>
+                    <p class="text-[10px] soluk mb-1">Detay</p>
+                    <select id="izgara" class="secim w-full">
+                        <option value="300" data-hizli>Normal</option>
+                        <option value="450">Yüksek</option>
+                        <option value="650" selected>Çok yüksek</option>
+                        <option value="900" data-hizli>Maksimum</option>
+                    </select>
+                </div>
+                <div id="yuksekAlan">
+                    <p class="text-[10px] soluk mb-1">3D etkisi</p>
+                    <select id="etki" class="secim w-full">
+                        <option value="1.0" selected>Güçlü</option>
+                        <option value="0.75">Orta</option>
+                        <option value="0.5">Basık</option>
+                    </select>
+                </div>
+                <div id="detayAyar" class="hidden"></div>
+            </div>
+            <p id="yuksekNot" class="text-[10px] soluk leading-relaxed">Kalınlık boşsa modelin kendi derinliği korunur (30 mm'de ~8-9 mm). Yazarsan o kalınlığa bastırılır.</p>
+        </div>
+
+        <!-- TAM 3D AYARLARI -->
+        <div id="tam3dAyar" class="kart p-4 space-y-3" style="display:none">
+            <div class="flex items-center justify-between">
+                <p class="text-sm font-semibold">Tam 3D</p>
+                <span class="pill">~3 dk</span>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <p class="text-[10px] soluk mb-1">Genişlik mm</p>
+                    <input id="genislik3d" type="number" value="30" min="5" max="200" step="1" class="alan">
+                </div>
+                <div>
+                    <p class="text-[10px] soluk mb-1">Kalınlık mm</p>
+                    <input id="kalinlik3d" type="number" min="0.5" max="200" step="0.5" placeholder="orantılı" class="alan">
+                </div>
+            </div>
+            <p class="text-[10px] soluk leading-relaxed">Kalınlık boşsa model orantılı çıkar; yazarsan o kalınlığa bastırılır.</p>
+        </div>
+
+        <!-- HAZIR MODEL AYARLARI -->
+        <div id="modelAyar" class="kart p-4 space-y-3" style="display:none">
+            <div class="flex items-center justify-between">
+                <p class="text-sm font-semibold">Hazır Model</p>
+                <span class="pill">stl · obj</span>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <p class="text-[10px] soluk mb-1">Uzun kenar mm</p>
+                    <input id="uzunKenar" type="number" min="1" max="500" step="0.5" placeholder="dosyadaki" class="alan">
+                </div>
+                <div>
+                    <p class="text-[10px] soluk mb-1">Oyulacak taraf</p>
+                    <select id="yon" class="secim w-full">
+                        <option value="-z" selected>Alt (-Z)</option>
+                        <option value="+z">Üst (+Z)</option>
+                        <option value="-y">Ön (-Y)</option>
+                        <option value="+y">Arka (+Y)</option>
+                        <option value="-x">Sol (-X)</option>
+                        <option value="+x">Sağ (+X)</option>
+                    </select>
+                </div>
+            </div>
+            <p class="text-[10px] soluk leading-relaxed">Meshy dosyaları genelde mm değildir; gerçek boyu yaz. Dış yüzey değişmez, oyuk seçilen taraftan açılır.</p>
+        </div>
+
+        <!-- İÇİ BOŞALT -->
+        <div id="bosaltAyar" class="kart p-4 space-y-3">
+            <label class="flex items-center justify-between cursor-pointer">
+                <span>
+                    <span class="block text-sm font-semibold">İçi Boşalt</span>
+                    <span class="block text-[10px] soluk">arkadan oyma · gümüş tasarrufu</span>
+                </span>
+                <input id="bosalt" type="checkbox" class="anahtar">
+            </label>
+            <div class="flex items-end gap-6">
+                <div>
+                    <p class="text-[10px] soluk">Kalan kalınlık</p>
+                    <p class="text-2xl font-medium leading-tight">
+                        <input id="mikron" type="number" value="800" min="10" max="10000" step="10" class="bg-transparent w-[4.2ch] outline-none">
+                        <span class="text-sm soluk">µm</span>
+                    </p>
+                    <p id="mikronMm" class="text-[10px] soluk"></p>
+                </div>
+                <div class="flex gap-1.5 mb-4">
+                    <button type="button" id="mikronAz" class="pill w-8 h-8 !p-0 text-base">&minus;</button>
+                    <button type="button" id="mikronCok" class="pill w-8 h-8 !p-0 text-base">+</button>
+                </div>
+                <div class="flex-1">
+                    <div id="mikronCubuk" class="flex gap-[3px] h-8 items-end"></div>
+                    <div class="flex justify-between text-[10px] soluk mt-1"><span>0 mm</span><span>1.5</span><span>3 mm</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Eylem -->
+        <div class="kart p-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <button id="uret" disabled class="sm:w-64 bg-[#e7eaec] hover:bg-white disabled:bg-[#26282b] disabled:text-[#6b7176] disabled:cursor-not-allowed text-[#0d0e0f] font-semibold py-3 rounded-lg text-xs tracking-wider flex items-center justify-center gap-2 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                MODELİ OLUŞTUR
+            </button>
+            <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 soluk flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" stroke-width="1.6"/><path stroke-width="1.6" stroke-linecap="round" d="M12 8v4l3 2"/></svg>
+                <p id="status" class="text-[11px] soluk">Başlamak için bir görsel ya da STL/OBJ yükle</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================== SONUÇ ===================== -->
+    <section id="sonucKart" class="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-4" style="display:none">
+        <div id="ekranSonuc" class="lg:col-span-7 kart p-3 space-y-2 lg:self-start">
+            <div class="flex items-center justify-between">
+                <p class="text-sm font-semibold">Sonuç</p>
+                <span id="sure" class="pill"></span>
+            </div>
+            <model-viewer id="viewer" camera-controls auto-rotate shadow-intensity="1" exposure="0.75" shadow-softness="0.6"></model-viewer>
+        </div>
+        <div class="lg:col-span-5 flex flex-col gap-4">
+            <div id="bilgiKartlar" class="space-y-4"></div>
+            <div class="kart p-3">
+                <div class="flex items-center justify-between mb-1">
+                    <p class="text-sm font-semibold">Dosyalar</p>
+                    <span class="text-[10px] soluk">gri · mm ölçülü</span>
+                </div>
+                <div id="linkler" class="divide-y divide-[#1f2123]"></div>
+            </div>
+            <div id="notlar" class="space-y-2"></div>
+        </div>
+    </section>
+
+</main>
+
+<script>
+const dz = document.getElementById('dropzone');
+const input = document.getElementById('dosya');
+const btn = document.getElementById('uret');
+const onizleme = document.getElementById('onizleme');
+const statusEl = document.getElementById('status');
+const viewer = document.getElementById('viewer');
+const linkler = document.getElementById('linkler');
+const modSec = document.getElementById('mod');
+const mikron = document.getElementById('mikron');
+const mikronMm = document.getElementById('mikronMm');
+const sonucKart = document.getElementById('sonucKart');
+const bilgiKartlar = document.getElementById('bilgiKartlar');
+const notlar = document.getElementById('notlar');
+let secilenDosya = null;
+
+// Kalan kalınlık çubukları (0-3 mm arası, Holders grafiği tarzı)
+const mikronCubuk = document.getElementById('mikronCubuk');
+const CUBUK = 40;
+for (let i = 0; i < CUBUK; i++) {
+  const c = document.createElement('span');
+  c.className = 'flex-1 rounded-[1px]';
+  mikronCubuk.appendChild(c);
+}
+function mikronAyarla(deger) {
+  const v = Math.max(10, Math.min(10000, Math.round((Number(deger) || 10) / 10) * 10));
+  mikron.value = v;
+  mikronMm.textContent = '(' + (v / 1000).toFixed(2) + ' mm)';
+  const dolu = Math.round(Math.min(1, v / 3000) * CUBUK);
+  [...mikronCubuk.children].forEach((c, i) => {
+    c.style.height = i < dolu ? '100%' : '55%';
+    c.style.background = i < dolu ? '#e7eaec' : '#2b2e31';
+  });
+}
+document.getElementById('mikronAz').onclick = () => mikronAyarla(Number(mikron.value) - 10);
+document.getElementById('mikronCok').onclick = () => mikronAyarla(Number(mikron.value) + 10);
+mikron.onchange = () => mikronAyarla(mikron.value);
+mikronAyarla(mikron.value);
+
+// Gostermede '' kullanilir ki Tailwind siniflarindaki (flex/grid) duzen korunsun.
+function goster_gizle(id, acik) {
+  document.getElementById(id).style.display = acik ? '' : 'none';
+}
+function modelDosyasi(dosya) {
+  return /\.(stl|obj)$/i.test(dosya.name);
+}
+modSec.onchange = () => {
+  const m = modSec.value;
+  goster_gizle('kabartmaAyar', m === 'kabartma');
+  goster_gizle('tam3dAyar', m === 'tam3d');
+  goster_gizle('bosaltAyar', m !== 'tam3d');
+  goster_gizle('modelAyar', m === 'model');
+  goster_gizle('cizimAyar', m !== 'model');
+  document.querySelectorAll('.modKutu').forEach(k => k.classList.toggle('aktif', k.dataset.mod === m));
+  if (m === 'model') document.getElementById('bosalt').checked = true;
+  if (secilenDosya) btn.disabled = modelDosyasi(secilenDosya) !== (m === 'model');
+};
+document.querySelectorAll('.modKutu').forEach(k => k.onclick = () => {
+  modSec.value = k.dataset.mod;
+  modSec.onchange();
+});
+const adrestekiMod = new URLSearchParams(location.search).get('mod');
+if (adrestekiMod && [...modSec.options].some(o => o.value === adrestekiMod)) modSec.value = adrestekiMod;
+modSec.onchange();
+
+const kaliteSec = document.getElementById('kalite');
+const izgaraSec = document.getElementById('izgara');
+kaliteSec.onchange = () => {
+  const yuksek = kaliteSec.value === 'yuksek';
+  goster_gizle('yuksekAlan', yuksek);
+  goster_gizle('yuksekKalinlik', yuksek);
+  goster_gizle('yuksekNot', yuksek);
+  goster_gizle('hizliAlan', !yuksek);
+  document.querySelectorAll('[data-kalite]').forEach(b => b.classList.toggle('aktif', b.dataset.kalite === kaliteSec.value));
+  // Yuksek kalitede detay sadece modelin cozunurlugunu secer: Normal/Maksimum fark etmez.
+  for (const o of izgaraSec.options) {
+    if (o.hasAttribute('data-hizli')) o.hidden = yuksek;
+  }
+  if (yuksek && izgaraSec.selectedOptions[0].hidden) izgaraSec.value = '650';
+};
+document.querySelectorAll('[data-kalite]').forEach(b => b.onclick = () => {
+  kaliteSec.value = b.dataset.kalite;
+  kaliteSec.onchange();
+});
+kaliteSec.onchange();
+
+
+dz.onclick = () => input.click();
+document.getElementById('aramaCubugu').onclick = () => input.click();
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && !['INPUT', 'SELECT'].includes(document.activeElement.tagName)) { e.preventDefault(); input.click(); }
+});
+for (const hedef of [dz, document.getElementById('aramaCubugu')]) {
+  hedef.ondragover = (e) => { e.preventDefault(); dz.classList.add('drag'); };
+  hedef.ondragleave = () => dz.classList.remove('drag');
+  hedef.ondrop = (e) => {
+    e.preventDefault();
+    dz.classList.remove('drag');
+    if (e.dataTransfer.files.length) {
+      secilenDosya = e.dataTransfer.files[0];
+      goster(secilenDosya);
+    }
+  };
+}
+input.onchange = () => {
+  if (input.files.length) {
+    secilenDosya = input.files[0];
+    goster(secilenDosya);
+  }
+};
+
+function varlikGoster(tur, not) {
+  document.getElementById('varlikTur').textContent = tur;
+  document.getElementById('varlikNot').textContent = not;
+}
+
+function goster(dosya) {
+  goster_gizle('varlikKart', true);
+  goster_gizle('bosDurum', false);
+  document.getElementById('dosyaAdi').textContent = dosya.name;
+  if (modelDosyasi(dosya)) {
+    onizleme.style.display = 'none';
+    document.getElementById('modelIkon').style.display = '';
+    varlikGoster('3D Model', 'onarım + boşaltma');
+    modSec.value = 'model';
+  } else {
+    document.getElementById('modelIkon').style.display = 'none';
+    onizleme.onload = () => cizimMiKontrol(onizleme);
+    onizleme.src = URL.createObjectURL(dosya);
+    onizleme.style.display = '';
+    varlikGoster('Görsel', 'yüksek ~6 dk');
+    if (modSec.value === 'model') modSec.value = 'kabartma';
+  }
+  modSec.onchange();
+  statusEl.textContent = 'Hazır — ayarları seçip MODELİ OLUŞTUR\'a bas';
+}
+
+// Renksiz ve cogunlukla beyaz zeminli gorsel = buyuk ihtimalle cizim/karakalem.
+function cizimMiKontrol(img) {
+  const c = document.createElement('canvas');
+  const olcek = 200 / Math.max(img.naturalWidth, img.naturalHeight);
+  c.width = Math.max(1, Math.round(img.naturalWidth * olcek));
+  c.height = Math.max(1, Math.round(img.naturalHeight * olcek));
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  const p = ctx.getImageData(0, 0, c.width, c.height).data;
+  let doygunluk = 0, beyaz = 0, n = p.length / 4;
+  for (let i = 0; i < p.length; i += 4) {
+    const mx = Math.max(p[i], p[i + 1], p[i + 2]), mn = Math.min(p[i], p[i + 1], p[i + 2]);
+    doygunluk += mx === 0 ? 0 : (mx - mn) / mx;
+    if (mn > 225) beyaz++;
+  }
+  const cizim = doygunluk / n < 0.08 && beyaz / n > 0.4;
+  document.getElementById('cizim').checked = cizim;
+  document.getElementById('cizimNot').textContent = cizim
+    ? 'çizim algılandı (+1 dk)'
+    : 'önce heykele çevir (+1 dk)';
+  if (cizim) varlikGoster('Karakalem', '+1 dk dönüştürme');
+}
+
+function el(etiket, sinif, metin) {
+  const e = document.createElement(etiket);
+  if (sinif) e.className = sinif;
+  if (metin !== undefined) e.textContent = metin;
+  return e;
+}
+
+// Portfolio kartı tarzı: Önce / Sonra / Tasarruf + kare ızgara
+function gumusKarti(b) {
+  const k = el('div', 'kart p-3 space-y-3');
+  const bas = el('div', 'flex items-center justify-between');
+  bas.append(el('p', 'text-sm font-semibold', 'Gümüş'), el('span', 'pill', '925 · 10.36 g/cm³'));
+  const satir = el('div', 'grid grid-cols-3 gap-2');
+  const tasarruf = b.once_gumus_gr > 0 ? (1 - b.sonra_gumus_gr / b.once_gumus_gr) * 100 : 0;
+  const hucre = (ad, deger, alt, altSinif) => {
+    const h = el('div');
+    h.append(el('p', 'text-[10px] soluk', ad), el('p', 'text-lg font-medium leading-tight', deger), el('p', 'text-[10px] ' + altSinif, alt));
+    return h;
+  };
+  satir.append(
+    hucre('Önce', b.once_gumus_gr + ' gr', b.once_hacim_mm3 + ' mm³', 'soluk'),
+    hucre('Sonra', b.sonra_gumus_gr + ' gr', b.sonra_hacim_mm3 + ' mm³', 'soluk'),
+    hucre('Tasarruf', '%' + tasarruf.toFixed(1), '↓ ' + (b.once_gumus_gr - b.sonra_gumus_gr).toFixed(2) + ' gr', 'yesil'));
+  // Kare ızgara: beyaz = kalan metal, gri = boşaltılan
+  const izgara = el('div', 'grid gap-[3px]');
+  izgara.style.gridTemplateColumns = 'repeat(20, minmax(0, 1fr))';
+  const toplam = 120, kalan = Math.round((100 - tasarruf) / 100 * toplam);
+  for (let i = 0; i < toplam; i++) {
+    const s = el('span', 'aspect-square rounded-[1px]');
+    s.style.background = i < kalan ? '#e7eaec' : (i % 2 ? '#3a3d41' : '#2b2e31');
+    izgara.appendChild(s);
+  }
+  const lejant = el('div', 'flex gap-4 text-[10px] soluk');
+  const l1 = el('span'); l1.innerHTML = '<span style="color:#e7eaec">■</span> '; l1.append('Metal %' + (100 - tasarruf).toFixed(1));
+  const l2 = el('span'); l2.innerHTML = '<span style="color:#3a3d41">■</span> '; l2.append('Boşaltılan %' + tasarruf.toFixed(1));
+  lejant.append(l1, l2);
+  k.append(bas, satir, izgara, lejant);
+  bilgiKartlar.appendChild(k);
+}
+
+function kalinlikKarti(o) {
+  const k = el('div', 'kart p-3');
+  const bas = el('div', 'flex items-center justify-between mb-2');
+  bas.append(el('p', 'text-sm font-semibold', 'Et Kalınlığı'), el('span', 'pill', 'hedef ' + mikron.value + ' µm'));
+  const satir = el('div', 'grid grid-cols-2 gap-2');
+  const h1 = el('div'); h1.append(el('p', 'text-[10px] soluk', 'Ortalama'), el('p', 'text-lg font-medium', o.medyan_mikron + ' µm'));
+  const h2 = el('div'); h2.append(el('p', 'text-[10px] soluk', 'En ince %1'), el('p', 'text-lg font-medium', o.en_ince_yuzde1_mikron + ' µm'));
+  satir.append(h1, h2);
+  k.append(bas, satir);
+  bilgiKartlar.appendChild(k);
+}
+
+// Sohbet balonu tarzı notlar
+function notKart(metin, tur) {
+  const sinif = tur === 'acik' ? 'balon-acik' : 'balon-koyu';
+  const k = el('div', sinif + ' p-3 text-[11px] leading-relaxed ' + (tur === 'acik' ? 'mr-8' : 'ml-8'));
+  if (tur === 'uyari') k.classList.add('kirmizi', 'font-semibold');
+  if (tur === 'onarim') k.style.color = '#f5b54a';
+  k.append(metin);
+  const zaman = el('p', 'text-[9px] mt-1 opacity-50 text-right',
+    new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }));
+  notlar.appendChild(k);
+  k._zaman = zaman;
+  return k;
+}
+
+// Assets listesi tarzı dosya satırı
+function linkKart(ad, alt, href, indir) {
+  const a = el(href ? 'a' : 'button', 'w-full flex items-center gap-3 py-2.5 text-left hover:opacity-80');
+  if (href) { a.href = href; if (indir) a.setAttribute('download', ''); }
+  const ikon = el('span', 'w-9 h-9 rounded-full bg-[#2b2e31] flex items-center justify-center text-[9px] font-bold', ad.slice(0, 3));
+  const orta = el('span', 'flex-1');
+  orta.append(el('span', 'block text-xs font-semibold', ad), el('span', 'block text-[10px] soluk', alt));
+  const sag = el('span', 'text-xs', href ? 'İndir ↓' : 'Aç →');
+  a.append(ikon, orta, sag);
+  linkler.appendChild(a);
+  return a;
+}
+
+btn.onclick = async () => {
+  if (!secilenDosya) return;
+  btn.disabled = true;
+  const uzun = modSec.value === 'tam3d' ||
+    (modSec.value === 'kabartma' && kaliteSec.value === 'yuksek');
+  statusEl.textContent = uzun
+    ? 'Üretiliyor... (3-5 dk; ilk üretim biraz daha uzun sürebilir)'
+    : 'Üretiliyor...';
+  sonucKart.style.display = 'none';
+  bilgiKartlar.innerHTML = '';
+  notlar.innerHTML = '';
+  linkler.innerHTML = '';
+
+  const fd = new FormData();
+  fd.append('image', secilenDosya);
+  fd.append('mod', modSec.value);
+  fd.append('kalite', kaliteSec.value);
+  fd.append('etki', document.getElementById('etki').value);
+  const tam3d = modSec.value === 'tam3d';
+  fd.append('genislik_mm', document.getElementById(tam3d ? 'genislik3d' : 'genislik').value);
+  fd.append('kalinlik_mm', document.getElementById(tam3d ? 'kalinlik3d' : 'kalinlikK').value);
+  fd.append('kabartma_mm', document.getElementById('derinlik').value);
+  fd.append('taban_mm', document.getElementById('taban').value);
+  fd.append('izgara', izgaraSec.value);
+  fd.append('bosalt', document.getElementById('bosalt').checked ? '1' : '0');
+  fd.append('et_mikron', mikron.value);
+  fd.append('yon', document.getElementById('yon').value);
+  fd.append('cizim', document.getElementById('cizim').checked ? '1' : '0');
+  fd.append('uzun_kenar_mm', document.getElementById('uzunKenar').value);
+
+  try {
+    const res = await fetch('/generate', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.error) {
+      statusEl.textContent = 'Hata: ' + data.error;
+    } else {
+      statusEl.textContent = 'Tamamlandı (' + data.sure_sn + ' sn)';
+      document.getElementById('sure').textContent = data.sure_sn + ' sn';
+      const b = data.bilgi;
+      if (b && b.once_hacim_mm3 !== undefined) gumusKarti(b);
+      if (b && b.olcum) kalinlikKarti(b.olcum);
+      if (b && b.onarim) notKart('Onarım: ' + b.onarim, 'onarim');
+      if (b && b.uyari) notKart('Uyarı: ' + b.uyari, 'uyari');
+      if (data.heykel_url) {
+        const k = notKart('', 'acik');
+        const konuB = el('b', '', data.konu || '-');
+        const resim = el('img', 'mt-2 rounded max-h-56');
+        resim.src = data.heykel_url;
+        k.append('Çizimde tanınan konu: ', konuB, ' — 3D bu heykel görselinden üretildi:', resim);
+      }
+      if (!notlar.children.length) notKart('Model hazır. Dosyaları indirebilir ya da Blender\'da açabilirsin.', 'acik');
+      notlar.querySelectorAll('div').forEach(k => k._zaman && k.append(k._zaman));
+      viewer.src = data.glb_url;
+      linkKart('OBJ', 'Wavefront · mm', data.obj_url, true);
+      linkKart('STL', 'Döküm / baskı · mm', data.stl_url, true);
+      linkKart('GLB', 'Önizleme · gri malzeme', data.glb_url, true);
+      const jobId = data.job_id;
+      const programlar = [
+        ['blender', 'Blender', 'STL içeri alınır'],
+        ['matrix', 'Matrix', 'STL · Rhino/MatrixGold'],
+        ['zbrush', 'ZBrush', 'OBJ · Tool > Import'],
+      ];
+      let kurulu = {};
+      try { kurulu = await (await fetch('/programlar')).json(); } catch (e) {}
+      for (const [kod, ad, alt] of programlar) {
+        const yok = kurulu[kod] === false;
+        const satir = linkKart(ad, yok ? 'bu bilgisayarda bulunamadı' : alt);
+        if (yok) satir.lastChild.textContent = 'Kurulu değil';
+        satir.onclick = async () => {
+          statusEl.textContent = ad + ' açılıyor, birkaç saniye sürebilir...';
+          const r = await fetch('/' + kod + '/' + jobId, { method: 'POST' });
+          const d = await r.json();
+          statusEl.textContent = d.error ? 'Hata: ' + d.error : ad + ' açıldı, model içeri alındı.';
+        };
+      }
+      sonucKart.style.display = '';
+      document.getElementById('ekranSonuc').scrollIntoView({ behavior: 'smooth' });
+    }
+  } catch (e) {
+    statusEl.textContent = 'Hata: ' + e;
+  }
+  btn.disabled = false;
+};
+</script>
+</body>
+</html>

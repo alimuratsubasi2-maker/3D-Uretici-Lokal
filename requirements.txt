@@ -1,0 +1,16 @@
+# PyTorch CUDA 12.8 surumu ayrica kurulur (README'ye bak):
+# pip install torch==2.8.0 torchvision==0.23.0 --index-url https://download.pytorch.org/whl/cu128
+flask>=3.1
+numpy>=2.0
+scipy>=1.17
+pillow>=12.0
+trimesh>=5.1
+manifold3d>=3.5
+pymeshlab>=2025.7
+rembg>=2.0.85
+diffusers>=0.40
+transformers>=5.0
+accelerate>=1.14
+opencv-python>=4.10
+scikit-image>=0.26
+pygltflib>=1.16

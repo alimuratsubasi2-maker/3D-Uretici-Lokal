@@ -1,0 +1,16 @@
+# Uretilen modeller ve yuklenen dosyalar (kisisel, cok buyuk)
+outputs/
+cikti_test/
+
+# Ayri klonlanan model kodlari (README'deki kurulum adimlarina bak)
+Hunyuan3D-2/
+TripoSR/
+
+# Kayit ve onbellek dosyalari
+app_log*.txt
+*.log
+__pycache__/
+*.pyc
+
+# Kisisel program yollari
+programlar.json
