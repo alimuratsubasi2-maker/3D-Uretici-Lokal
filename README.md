@@ -34,7 +34,7 @@ Modeller ilk kullanımda Hugging Face'ten otomatik indirilir.
 ## Kurulum
 
 ```bash
-git clone https://github.com/<kullanici-adi>/3D-Uretici-Lokal.git
+git clone https://github.com/alimuratsubasi2-maker/3D-Uretici-Lokal.git
 cd 3D-Uretici-Lokal
 
 # PyTorch (CUDA 12.8)
